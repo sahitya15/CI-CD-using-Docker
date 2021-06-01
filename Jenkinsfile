@@ -1,62 +1,53 @@
-pipeline {
+pipeline{
     agent any
-	
-	  tools
+    triggers {
+        pollSCM '* * * * *'
+    }
+    environment
     {
-       maven "Maven"
+        VERSION="${BUILD_NUMBER}"
+        PROJECT= 'practice'
+        IMAGE= "$PROJECT:$VERSION"
+        ECRURL='https://453993228295.dkr.ecr.us-east-1.amazonaws.com/practice'
+        ECRCRED= 'ecr:us-east-1:aws-cred'
     }
- stages {
-      stage('checkout') {
-           steps {
-             
-                git branch: 'master', url: 'https://github.com/devops4solutions/CI-CD-using-Docker.git'
-             
-          }
-        }
-	 stage('Execute Maven') {
-           steps {
-             
-                sh 'mvn package'             
-          }
-        }
-        
+    stages{
+        stage('get scm'){
+            steps{
+            git 'https://github.com/sahitya15/CI-CD-using-Docker.git'
+         }
+    }
+         stage('Mvn Package'){
+             steps{
+                 
+         sh 'mvn clean package'
+            
+             }
+    }
 
-  stage('Docker Build and Tag') {
-           steps {
-              
-                sh 'docker build -t samplewebapp:latest .' 
-                sh 'docker tag samplewebapp nikhilnidhi/samplewebapp:latest'
-                //sh 'docker tag samplewebapp nikhilnidhi/samplewebapp:$BUILD_NUMBER'
-               
-          }
-        }
-     
-  stage('Publish image to Docker Hub') {
-          
-            steps {
-        withDockerRegistry([ credentialsId: "dockerHub", url: "" ]) {
-          sh  'docker push nikhilnidhi/samplewebapp:latest'
-        //  sh  'docker push nikhilnidhi/samplewebapp:$BUILD_NUMBER' 
-        }
-                  
-          }
-        }
-     
-      stage('Run Docker container on Jenkins Agent') {
-             
-            steps 
-			{
-                sh "docker run -d -p 8003:8080 nikhilnidhi/samplewebapp"
- 
-            }
-        }
- stage('Run Docker container on remote hosts') {
-             
-            steps {
-                sh "docker -H ssh://jenkins@172.31.28.25 run -d -p 8003:8080 nikhilnidhi/samplewebapp"
- 
+         stage('image build'){
+             steps{
+                 script{
+                     docker.build('$IMAGE')
+                 }
+             }
+
+    }
+    stage('push image'){
+        steps{
+            script{
+                docker.withRegistry(ECRURL,ECRCRED)
+                {
+                    docker.image(IMAGE).push()
+                }
             }
         }
     }
-	}
-    
+}
+post
+{
+    always{
+        sh "docker rmi $IMAGE | true"
+    }
+}
+}
